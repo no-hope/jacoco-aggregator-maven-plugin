@@ -54,52 +54,67 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
      */
     @Parameter(defaultValue = "${project.reporting.outputDirectory}/jacoco")
     private File outputDirectory;
+
     /** Encoding of the generated reports. */
     @Parameter(property = "project.reporting.outputEncoding", defaultValue = "UTF-8")
     private String outputEncoding;
+
     /** Encoding of the source files. */
     @Parameter(property = "project.build.sourceEncoding", defaultValue = "UTF-8")
     private String sourceEncoding;
+
     /** File with execution data. */
     @Parameter(defaultValue = "${project.build.directory}/jacoco.exec")
     private File dataFile;
+
     /** {@code true} to fail on missing data files in {@code dataFiles} list. */
     @Parameter
     private boolean strict = false;
+
     /** Do not produce report for each module in multimodule project. */
     @Parameter
     private boolean skipModule = false;
+
     /** Flg for aggregating each module report in multimodule environment. */
     @Parameter
     private boolean aggregate = true;
+
     /**
      * A list of class files to include in the report. May use wildcard
      * characters (* and ?). When not specified everything will be included.
      */
     @Parameter
     private List<String> includes;
+
     /**
      * A list of class files to exclude from the report. May use wildcard
      * characters (* and ?). When not specified nothing will be excluded.
      */
     @Parameter
     private List<String> excludes;
+
     /** Flag used to suppress execution. */
-    @Parameter
+    @Parameter(property = "skip.jacoco", defaultValue = "false")
     private boolean skip;
+
     /** Maven project. */
     @Component
     private MavenProject project;
+
     /** The projects in the reactor for aggregation report. */
     @Parameter(property = "reactorProjects", readonly = true)
     private List<MavenProject> reactorProjects;
+
     /** Doxia Site Renderer. */
     @Component
     private Renderer siteRenderer;
+
     @Parameter(required = true)
     private String groupName;
+
     @Parameter(required = true)
     private String groupDirectory;
+
     @Parameter(required = true)
     private List<String> dataFiles;
 
