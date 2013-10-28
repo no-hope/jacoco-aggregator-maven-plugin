@@ -9,7 +9,7 @@
     </parent>
 
     <groupId>org.no-hope</groupId>
-    <artifactId>jacoco-aggregate-maven-plugin</artifactId>
+    <artifactId>jacoco-aggregator-maven-plugin</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
 
