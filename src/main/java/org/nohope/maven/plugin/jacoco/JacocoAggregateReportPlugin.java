@@ -36,6 +36,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
+import static org.nohope.maven.plugin.jacoco.ReportFormat.csv;
+import static org.nohope.maven.plugin.jacoco.ReportFormat.html;
+import static org.nohope.maven.plugin.jacoco.ReportFormat.xml;
+
 /**
  * @author <a href="mailto:ketoth.xupack@gmail.com">Ketoth Xupack</a>
  * @since 2013-10-28 12:51
@@ -81,7 +85,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
     private boolean aggregate = true;
 
     @Parameter
-    private String reports = "xml,html";
+    private List<ReportFormat> reportFormats = Collections.emptyList();
 
     /**
      * A list of class files to include in the report. May use wildcard
@@ -107,19 +111,19 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
 
     /** The projects in the reactor for aggregation report. */
     @Parameter(property = "reactorProjects", readonly = true)
-    private List<MavenProject> reactorProjects;
+    private List<MavenProject> reactorProjects = Collections.emptyList();
 
     /** Doxia Site Renderer. */
     @Component
     private Renderer siteRenderer;
 
-    @Parameter(required = true)
+    @Parameter
     private String groupName;
 
-    @Parameter(required = true)
+    @Parameter
     private String groupDirectory;
 
-    @Parameter(required = true)
+    @Parameter
     private List<String> dataFiles;
 
     @Override
@@ -154,6 +158,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         if (!canGenerateReport()) {
             return;
         }
+
         try {
             executeReport(Locale.getDefault());
         } catch (final MavenReportException e) {
@@ -173,13 +178,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         return true;
     }
 
-    @Override
-    public boolean canGenerateReport() {
-        if (skip) {
-            getLog().info("Skipping JaCoCo execution");
-            return false;
-        }
-
+    private void initializeAndRenderNonHtml() {
         // fallback to old behavior
         if (dataFiles == null) {
             skipModule = false;
@@ -187,12 +186,34 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
             aggregate = true;
         }
 
+        if (!skipModule && !reportFormats.contains(html)) {
+            try {
+                executeReport(Locale.getDefault(), false);
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            } catch (MavenReportException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    @Override
+    public boolean canGenerateReport() {
+        if (skip) {
+            getLog().info("Skipping JaCoCo execution");
+            return false;
+        }
+
+        initializeAndRenderNonHtml();
+
         if (dataFiles == null && dataFile != null && !dataFile.exists()) {
             getLog().warn("Skipping JaCoCo execution due to missing execution data file");
             return false;
         }
 
-        return true;
+        return !(!skipModule && !reportFormats.contains(html))
+               && !(skipModule && !project.equals(getLastProject()))
+               && !(aggregate && !project.equals(getLastProject()));
     }
 
     @Override
@@ -211,8 +232,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
     }
 
     @Override
-    protected void executeReport(final Locale locale)
-            throws MavenReportException {
+    protected void executeReport(final Locale locale) throws MavenReportException {
         try {
             executeReport(locale, false);
             if (project.equals(getLastProject())) {
@@ -237,9 +257,6 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         }
 
         final File outputDirectory = getOutputDirectory(root ? getRootProject() : project);
-
-        getLog().info("Jacoco: Generating report " + groupName + " to " + outputDirectory);
-
         final IReportVisitor mainVisitor = createVisitor(locale, outputDirectory);
         boolean visited = false;
 
@@ -272,21 +289,21 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
             throw new IOException("Unable to create " + outputDirectory);
         }
 
-        if (reports.contains("xml")) {
+        if (reportFormats.contains(xml)) {
             final XMLFormatter xmlFormatter = new XMLFormatter();
             xmlFormatter.setOutputEncoding(outputEncoding);
             visitors.add(xmlFormatter.createVisitor(new FileOutputStream(new File(
                     outputDirectory, "jacoco.xml"))));
         }
 
-        if (reports.contains("csv")) {
+        if (reportFormats.contains(csv)) {
             final CSVFormatter csvFormatter = new CSVFormatter();
             csvFormatter.setOutputEncoding(outputEncoding);
             visitors.add(csvFormatter.createVisitor(new FileOutputStream(new File(
                     outputDirectory, "jacoco.csv"))));
         }
 
-        if (reports.contains("html")) {
+        if (reportFormats.contains(html)) {
             final HTMLFormatter htmlFormatter = new HTMLFormatter();
             htmlFormatter.setOutputEncoding(outputEncoding);
             htmlFormatter.setLocale(locale);
