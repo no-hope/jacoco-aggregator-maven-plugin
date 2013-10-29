@@ -58,7 +58,6 @@ public class JacocoAggregateMergePlugin extends AbstractMojo {
         getLog().warn("context: " + getPluginContext());
 
         if (!canMergeReports()) {
-            getLog().warn("Unable to merge reports: ");
             return;
         }
 
@@ -67,7 +66,7 @@ public class JacocoAggregateMergePlugin extends AbstractMojo {
 
     private boolean canMergeReports() {
         if (outputFiles == null || outputFiles.isEmpty()) {
-            getLog().info("Fuck!! " + outputFiles);
+            getLog().info("No output files passed. Skipping");
             return false;
         }
         return true;
