@@ -17,8 +17,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <!-- 0.6.3.201306030806 -->
-        <jacoco.version>0.6.4-SNAPSHOT</jacoco.version>
+        <jacoco.version>0.6.3.201306030806</jacoco.version>
 
         <maven-annotations.version>3.2</maven-annotations.version>
         <maven-core.version>3.1.0</maven-core.version>
