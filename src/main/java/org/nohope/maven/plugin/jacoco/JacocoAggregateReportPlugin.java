@@ -1,5 +1,6 @@
 package org.nohope.maven.plugin.jacoco;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.maven.doxia.siterenderer.Renderer;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Component;
@@ -40,8 +41,8 @@ import java.util.Locale;
  * @since 2013-10-28 12:51
  */
 @Mojo(name = "aggregate",
-        aggregator = true,
-        defaultPhase = LifecyclePhase.SITE
+      aggregator = true,
+      defaultPhase = LifecyclePhase.SITE
 )
 public class JacocoAggregateReportPlugin extends AbstractMavenReport {
 
@@ -52,7 +53,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
      * generation, the output directory configured in the Maven Site Plugin is
      * used instead.
      */
-    @Parameter(defaultValue = "${project.reporting.outputDirectory}/jacoco")
+    @Parameter(defaultValue = "${project.reporting.outputDirectory}/jacoco", readonly = true)
     private File outputDirectory;
 
     /** Encoding of the generated reports. */
@@ -78,6 +79,9 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
     /** Flg for aggregating each module report in multimodule environment. */
     @Parameter
     private boolean aggregate = true;
+
+    @Parameter
+    private String reports = "xml,html";
 
     /**
      * A list of class files to include in the report. May use wildcard
@@ -120,31 +124,12 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
 
     @Override
     public String getOutputName() {
-        return join(null, getOutputDirectory(), groupDirectory, "index").getAbsolutePath();
-    }
-
-    private static File join(final File file, final String... parts) {
-        final List<String> elements = new ArrayList<String>(Arrays.asList(parts));
-        File result = file;
-        if (file == null && parts.length > 0) {
-            result = new File(elements.remove(0));
-        }
-
-        for (final String e : elements) {
-            result = new File(result, e);
-        }
-
-        return result;
+        return StringUtils.join(Arrays.asList("jacoco", groupDirectory, "index"), File.separatorChar);
     }
 
     @Override
     public String getName(final Locale locale) {
         return doPostfix("JaCoCo");
-    }
-
-    @Override
-    public String getDescription(final Locale locale) {
-        return "JaCoCo Test Coverage Report.";
     }
 
     private String doPostfix(final String string) {
@@ -153,6 +138,11 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         }
 
         return string + " (" + groupName + ')';
+    }
+
+    @Override
+    public String getDescription(final Locale locale) {
+        return "JaCoCo Test Coverage Report.";
     }
 
     /**
@@ -171,6 +161,11 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
                                              + getName(Locale.ENGLISH)
                                              + " report generation.", e);
         }
+    }
+
+    @Override
+    public void setReportOutputDirectory(final File reportOutputDirectory) {
+        outputDirectory = reportOutputDirectory;
     }
 
     @Override
@@ -207,7 +202,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
 
     @Override
     public String getOutputDirectory() {
-        return outputDirectory.getPath();
+        return join(outputDirectory, "jacoco", groupDirectory).getAbsolutePath();
     }
 
     @Override
@@ -226,6 +221,11 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         } catch (final IOException e) {
             throw new MavenReportException("Error while creating report: " + e.getMessage(), e);
         }
+    }
+
+    private MavenProject getLastProject() {
+        final int size = reactorProjects.size();
+        return reactorProjects.get(size - 1);
     }
 
     private void executeReport(final Locale locale, final boolean root)
@@ -264,17 +264,82 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         }
     }
 
-    private File getOutputDirectory(final MavenProject project) {
-        return new File(new File(project.getModel().getReporting().getOutputDirectory(), "jacoco"), groupDirectory);
+    private IReportVisitor createVisitor(final Locale locale, final File outputDirectory)
+            throws IOException {
+        final List<IReportVisitor> visitors = new ArrayList<IReportVisitor>();
+
+        if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
+            throw new IOException("Unable to create " + outputDirectory);
+        }
+
+        if (reports.contains("xml")) {
+            final XMLFormatter xmlFormatter = new XMLFormatter();
+            xmlFormatter.setOutputEncoding(outputEncoding);
+            visitors.add(xmlFormatter.createVisitor(new FileOutputStream(new File(
+                    outputDirectory, "jacoco.xml"))));
+        }
+
+        if (reports.contains("csv")) {
+            final CSVFormatter csvFormatter = new CSVFormatter();
+            csvFormatter.setOutputEncoding(outputEncoding);
+            visitors.add(csvFormatter.createVisitor(new FileOutputStream(new File(
+                    outputDirectory, "jacoco.csv"))));
+        }
+
+        if (reports.contains("html")) {
+            final HTMLFormatter htmlFormatter = new HTMLFormatter();
+            htmlFormatter.setOutputEncoding(outputEncoding);
+            htmlFormatter.setLocale(locale);
+            visitors.add(htmlFormatter.createVisitor(new FileMultiReportOutput(
+                    outputDirectory)));
+        }
+
+        return new MultiReportVisitor(visitors);
     }
 
-    private MavenProject getRootProject() {
-        for (final MavenProject reactorProject : reactorProjects) {
-            if (reactorProject.isExecutionRoot()) {
-                return reactorProject;
-            }
+    /**
+     * @return {@code true} if project was actually visited
+     *
+     * @throws IOException
+     */
+    private boolean visitProject(final ExecFileLoader loader,
+                                 final IReportGroupVisitor visitor,
+                                 final MavenProject project)
+            throws IOException {
+
+        // skip processing modules with "pom" packaging
+        if ("pom".equals(project.getPackaging())) {
+            return false;
         }
-        throw new IllegalStateException("Unable to determine root project");
+
+        final FileFilter fileFilter = new FileFilter(this.includes, this.excludes);
+        final BundleCreator creator = new BundleCreator(project, fileFilter);
+        final IBundleCoverage bundle = creator.createBundle(loader.getExecutionDataStore());
+
+        final SourceFileCollection locator = new SourceFileCollection(
+                getCompileSourceRoots(project),
+                sourceEncoding);
+
+        checkForMissingDebugInformation(bundle);
+        visitor.visitBundle(bundle, locator);
+
+        return true;
+    }
+
+    private static List<File> getCompileSourceRoots(final MavenProject project) {
+        final List<File> result = new ArrayList<File>();
+        for (final Object path : project.getCompileSourceRoots()) {
+            result.add(resolvePath(project, (String) path));
+        }
+        return result;
+    }
+
+    private void checkForMissingDebugInformation(final ICoverageNode node) {
+        if (node.getClassCounter().getTotalCount() > 0
+            && node.getLineCounter().getTotalCount() == 0) {
+            getLog().warn(
+                    "To enable source code annotation class files have to be compiled with debug information.");
+        }
     }
 
     private ExecFileLoader loadExecutionData(final boolean root)
@@ -309,13 +374,6 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         }
     }
 
-    private List<String> getDataFiles() {
-        if (dataFiles == null && dataFile != null) {
-            return Collections.singletonList(dataFile.getPath());
-        }
-        return dataFiles;
-    }
-
     private static File resolvePath(final MavenProject project, final String path) {
         File file = new File(path);
         if (!file.isAbsolute()) {
@@ -324,81 +382,38 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
         return file;
     }
 
-    /**
-     * @return {@code true} if project was actually visited
-     *
-     * @throws IOException
-     */
-    private boolean visitProject(final ExecFileLoader loader,
-                                 final IReportGroupVisitor visitor,
-                                 final MavenProject project)
-            throws IOException {
-
-        // skip processing modules with "pom" packaging
-        if ("pom".equals(project.getPackaging())) {
-            return false;
+    private List<String> getDataFiles() {
+        if (dataFiles == null && dataFile != null) {
+            return Collections.singletonList(dataFile.getPath());
         }
-
-        final FileFilter fileFilter = new FileFilter(this.includes, this.excludes);
-        final BundleCreator creator = new BundleCreator(project, fileFilter);
-        final IBundleCoverage bundle = creator.createBundle(loader.getExecutionDataStore());
-
-        final SourceFileCollection locator = new SourceFileCollection(
-                getCompileSourceRoots(project),
-                sourceEncoding);
-
-        checkForMissingDebugInformation(bundle);
-        visitor.visitBundle(bundle, locator);
-
-        return true;
+        return dataFiles;
     }
 
-    private void checkForMissingDebugInformation(final ICoverageNode node) {
-        if (node.getClassCounter().getTotalCount() > 0
-            && node.getLineCounter().getTotalCount() == 0) {
-            getLog().warn(
-                    "To enable source code annotation class files have to be compiled with debug information.");
+    private MavenProject getRootProject() {
+        for (final MavenProject reactorProject : reactorProjects) {
+            if (reactorProject.isExecutionRoot()) {
+                return reactorProject;
+            }
         }
+        throw new IllegalStateException("Unable to determine root project");
     }
 
-    private static List<File> getCompileSourceRoots(final MavenProject project) {
-        final List<File> result = new ArrayList<File>();
-        for (final Object path : project.getCompileSourceRoots()) {
-            result.add(resolvePath(project, (String) path));
+    private File getOutputDirectory(final MavenProject project) {
+        return join(null, project.getModel().getReporting().getOutputDirectory(), "jacoco", groupDirectory);
+    }
+
+    private static File join(final File file, final String... parts) {
+        final List<String> elements = new ArrayList<String>(Arrays.asList(parts));
+        File result = file;
+        if (file == null && parts.length > 0) {
+            result = new File(elements.remove(0));
         }
+
+        for (final String e : elements) {
+            result = new File(result, e);
+        }
+
         return result;
-    }
-
-    private IReportVisitor createVisitor(final Locale locale, final File outputDirectory)
-            throws IOException {
-        final List<IReportVisitor> visitors = new ArrayList<IReportVisitor>();
-
-        if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
-            throw new IOException("Unable to create " + outputDirectory);
-        }
-
-        final XMLFormatter xmlFormatter = new XMLFormatter();
-        xmlFormatter.setOutputEncoding(outputEncoding);
-        visitors.add(xmlFormatter.createVisitor(new FileOutputStream(new File(
-                outputDirectory, "jacoco.xml"))));
-
-        final CSVFormatter csvFormatter = new CSVFormatter();
-        csvFormatter.setOutputEncoding(outputEncoding);
-        visitors.add(csvFormatter.createVisitor(new FileOutputStream(new File(
-                outputDirectory, "jacoco.csv"))));
-
-        final HTMLFormatter htmlFormatter = new HTMLFormatter();
-        htmlFormatter.setOutputEncoding(outputEncoding);
-        htmlFormatter.setLocale(locale);
-        visitors.add(htmlFormatter.createVisitor(new FileMultiReportOutput(
-                outputDirectory)));
-
-        return new MultiReportVisitor(visitors);
-    }
-
-    private MavenProject getLastProject() {
-        final int size = reactorProjects.size();
-        return reactorProjects.get(size - 1);
     }
 
     private static class SourceFileCollection implements ISourceFileLocator {
