@@ -120,11 +120,11 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
 
     @Override
     public String getOutputName() {
-        return join(outputDirectory, groupDirectory, "index").getAbsolutePath();
+        return join(null, getOutputDirectory(), groupDirectory, "index").getAbsolutePath();
     }
 
     private static File join(final File file, final String... parts) {
-        final List<String> elements = Arrays.asList(parts);
+        final List<String> elements = new ArrayList<String>(Arrays.asList(parts));
         File result = file;
         if (file == null && parts.length > 0) {
             result = new File(elements.remove(0));
@@ -207,7 +207,7 @@ public class JacocoAggregateReportPlugin extends AbstractMavenReport {
 
     @Override
     public String getOutputDirectory() {
-        return outputDirectory.getAbsolutePath();
+        return outputDirectory.getPath();
     }
 
     @Override
