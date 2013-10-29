@@ -66,7 +66,7 @@ public class FileFilter {
     private static String buildPattern(final List<String> patterns,
                                        final String defaultPattern) {
         String pattern = defaultPattern;
-        if (patterns != null && !pattern.isEmpty()) {
+        if (patterns != null && !patterns.isEmpty()) {
             pattern = StringUtils.join(patterns.iterator(), ",");
         }
         return pattern;

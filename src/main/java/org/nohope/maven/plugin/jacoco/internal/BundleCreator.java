@@ -50,8 +50,7 @@ public final class BundleCreator {
             final ExecutionDataStore executionDataStore) throws IOException {
         final CoverageBuilder builder = new CoverageBuilder();
         final Analyzer analyzer = new Analyzer(executionDataStore, builder);
-        final File classesDir = new File(this.project.getBuild()
-                                                     .getOutputDirectory());
+        final File classesDir = new File(this.project.getBuild().getOutputDirectory());
 
         @SuppressWarnings("unchecked")
         final List<File> filesToAnalyze = FileUtils.getFiles(classesDir,
