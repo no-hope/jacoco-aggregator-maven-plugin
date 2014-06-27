@@ -8,29 +8,17 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.reporting.MavenReportException;
 import org.jacoco.core.analysis.IBundleCoverage;
 import org.jacoco.core.analysis.ICoverageNode;
-import org.jacoco.core.data.ExecFileLoader;
-import org.jacoco.report.FileMultiReportOutput;
-import org.jacoco.report.IReportGroupVisitor;
-import org.jacoco.report.IReportVisitor;
-import org.jacoco.report.ISourceFileLocator;
-import org.jacoco.report.MultiReportVisitor;
+import org.jacoco.core.tools.ExecFileLoader;
+import org.jacoco.report.*;
 import org.jacoco.report.csv.CSVFormatter;
 import org.jacoco.report.html.HTMLFormatter;
 import org.jacoco.report.xml.XMLFormatter;
 import org.nohope.maven.plugin.jacoco.internal.BundleCreator;
 import org.nohope.maven.plugin.jacoco.internal.FileFilter;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
+import java.io.*;
+import java.util.*;
+import java.util.regex.Pattern;
 
 import static org.nohope.maven.plugin.jacoco.ReportFormat.*;
 
@@ -48,21 +36,17 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     @Parameter(property = "project.build.sourceEncoding", defaultValue = "UTF-8")
     protected String sourceEncoding;
 
-    /** File with execution data. */
-    @Parameter(defaultValue = "${project.build.directory}/jacoco.exec")
-    protected File dataFile;
-
     /** {@code true} to fail on missing data files in {@code dataFiles} list. */
     @Parameter
     protected boolean strict = false;
 
-    /** Do not produce report for each module in multimodule project. */
+    /** Do not produce report for each module in multi-module project. */
     @Parameter
-    protected boolean skipModule = false;
+    protected boolean skipModule = true;
 
-    /** Flg for aggregating each module report in multimodule environment. */
+    /** Flg for aggregating each module report in multi-module environment. */
     @Parameter
-    protected boolean aggregate = true;
+    protected boolean aggregateRoot = true;
 
     @Parameter
     protected List<ReportFormat> reportFormats = Collections.emptyList();
@@ -94,10 +78,16 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     protected List<MavenProject> reactorProjects = Collections.emptyList();
 
     @Parameter
-    protected String groupName;
+    protected List<String> dataFiles = Collections.emptyList();
 
     @Parameter
-    protected List<String> dataFiles;
+    protected List<String> sources = Arrays.asList(
+            "src/main/java",
+            "src/main/groovy",
+            "src/main/scala");
+
+    @Parameter
+    protected List<String> excludeModules;
 
     /**
      * This method is called when the report generation is invoked directly as a
@@ -117,19 +107,12 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     }
 
     private void initializeAndRenderNonHtml() {
-        // fallback to old behavior
-        if (dataFiles == null) {
-            skipModule = false;
-            strict = true;
-            aggregate = true;
-        }
-
         if (!"pom".equals(project.getPackaging()) && !skipModule && !reportFormats.contains(html)) {
             try {
                 executeReport(Locale.getDefault(), false);
-            } catch (IOException e) {
+            } catch (final IOException e) {
                 throw new IllegalStateException(e);
-            } catch (MavenReportException e) {
+            } catch (final MavenReportException e) {
                 throw new IllegalStateException(e);
             }
         }
@@ -143,14 +126,14 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
 
         initializeAndRenderNonHtml();
 
-        if (dataFiles == null && dataFile != null && !dataFile.exists()) {
+        if (dataFiles == null) {
             getLog().warn("Skipping JaCoCo execution due to missing execution data file");
             return false;
         }
 
         return !(!skipModule && !reportFormats.contains(html))
                && !(skipModule && !project.equals(getLastProject()))
-               && !(aggregate && !project.equals(getLastProject()));
+               && !(aggregateRoot && !project.equals(getLastProject()));
     }
 
     protected void executeReport(final Locale locale) throws MavenReportException {
@@ -172,7 +155,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     private void executeReport(final Locale locale, final boolean root)
             throws IOException, MavenReportException {
 
-        final boolean exec = root ? aggregate : !skipModule;
+        final boolean exec = root ? aggregateRoot : !skipModule;
         if (!exec) {
             return;
         }
@@ -186,11 +169,30 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
                 loader.getSessionInfoStore().getInfos(),
                 loader.getExecutionDataStore().getContents());
 
+
+        final List<Pattern> patterns = new ArrayList<Pattern>();
+        for (final String excludeModule : excludeModules) {
+            patterns.add(Pattern.compile(excludeModule));
+        }
+
         if (root) {
             final IReportGroupVisitor subProjectVisitor =
                     mainVisitor.visitGroup(getRootProject().getName());
 
             for (final MavenProject child : reactorProjects) {
+                boolean skip = false;
+                for (final Pattern pattern : patterns) {
+                    if (pattern.matcher(child.getArtifactId()).matches()
+                        || pattern.matcher(child.getGroupId() + ':' + child.getArtifactId()).matches()) {
+                        skip = true;
+                        break;
+                    }
+                }
+
+                if (skip) {
+                    continue;
+                }
+
                 visited |= visitProject(loader, subProjectVisitor, child);
             }
         } else {
@@ -242,11 +244,11 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
      */
     private boolean visitProject(final ExecFileLoader loader,
                                  final IReportGroupVisitor visitor,
-                                 final MavenProject project)
-            throws IOException {
+                                 final MavenProject project) throws IOException {
 
         // skip processing modules with "pom" packaging
-        if ("pom".equals(project.getPackaging())) {
+        final File classesDir = new File(project.getBuild().getOutputDirectory());
+        if ("pom".equals(project.getPackaging()) || !classesDir.exists()) {
             return false;
         }
 
@@ -264,12 +266,16 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
         return true;
     }
 
-    private static List<File> getCompileSourceRoots(final MavenProject project) {
-        final List<File> result = new ArrayList<File>();
-        for (final Object path : project.getCompileSourceRoots()) {
-            result.add(resolvePath(project, (String) path));
+    private List<File> getCompileSourceRoots(final MavenProject project) {
+        final Set<File> result = new HashSet<File>();
+        for (final String path : project.getCompileSourceRoots()) {
+            result.add(resolvePath(project, path));
         }
-        return result;
+
+        for (final String path : sources) {
+            result.add(resolvePath(project, path));
+        }
+        return new ArrayList<File>(result);
     }
 
     private void checkForMissingDebugInformation(final ICoverageNode node) {
@@ -280,8 +286,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
         }
     }
 
-    private ExecFileLoader loadExecutionData(final boolean root)
-            throws MavenReportException {
+    private ExecFileLoader loadExecutionData(final boolean root) throws MavenReportException {
         final ExecFileLoader loader = new ExecFileLoader();
         try {
             if (root) {
@@ -300,7 +305,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
 
     private void loadExecFile(final ExecFileLoader loader, final MavenProject project)
             throws IOException, MavenReportException {
-        for (final String dataFile : getDataFiles()) {
+        for (final String dataFile : dataFiles) {
             final File file = resolvePath(project, dataFile);
             if (file.exists()) {
                 loader.load(file);
@@ -318,13 +323,6 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
             file = new File(project.getBasedir(), path);
         }
         return file;
-    }
-
-    private List<String> getDataFiles() {
-        if (dataFiles == null && dataFile != null) {
-            return Collections.singletonList(dataFile.getPath());
-        }
-        return dataFiles;
     }
 
     private MavenProject getRootProject() {

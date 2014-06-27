@@ -46,8 +46,7 @@ public final class BundleCreator {
      * @throws java.io.IOException
      *             if class files can't be read
      */
-    public IBundleCoverage createBundle(
-            final ExecutionDataStore executionDataStore) throws IOException {
+    public IBundleCoverage createBundle(final ExecutionDataStore executionDataStore) throws IOException {
         final CoverageBuilder builder = new CoverageBuilder();
         final Analyzer analyzer = new Analyzer(executionDataStore, builder);
         final File classesDir = new File(this.project.getBuild().getOutputDirectory());

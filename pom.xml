@@ -10,7 +10,7 @@
 
     <groupId>org.no-hope</groupId>
     <artifactId>jacoco-aggregator-maven-plugin</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
 
     <licenses>
@@ -43,7 +43,7 @@
         <maven-core.version>3.0.5</maven-core.version>
         <maven-reporting.version>2.2</maven-reporting.version>
 
-        <jacoco.version>0.6.3.201306030806</jacoco.version>
+        <jacoco.version>0.7.1.201405082137</jacoco.version>
         <commons-lang3.version>3.1</commons-lang3.version>
     </properties>
 
