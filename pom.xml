@@ -54,6 +54,12 @@
     <build>
         <plugins>
             <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <configuration combine.self="append">
+                    <connectionUrl>${project.scm.connection}</connectionUrl>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-plugin-plugin</artifactId>
                 <version>3.3</version>
@@ -91,6 +97,19 @@
                         </tagletArtifact>
                     </tagletArtifacts>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.2.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
