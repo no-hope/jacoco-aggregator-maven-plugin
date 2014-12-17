@@ -56,14 +56,14 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
      * characters (* and ?). When not specified everything will be included.
      */
     @Parameter
-    protected List<String> includes;
+    protected List<String> includes = Collections.emptyList();
 
     /**
      * A list of class files to exclude from the report. May use wildcard
      * characters (* and ?). When not specified nothing will be excluded.
      */
     @Parameter
-    protected List<String> excludes;
+    protected List<String> excludes = Collections.emptyList();
 
     /** Flag used to suppress execution. */
     @Parameter(property = "skip.jacoco", defaultValue = "false")
@@ -87,7 +87,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
             "src/main/scala");
 
     @Parameter
-    protected List<String> excludeModules;
+    protected List<String> excludeModules = Collections.emptyList();
 
     /**
      * This method is called when the report generation is invoked directly as a
