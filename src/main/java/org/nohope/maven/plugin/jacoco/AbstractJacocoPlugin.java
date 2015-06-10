@@ -48,6 +48,10 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     @Parameter
     protected boolean aggregateRoot = true;
 
+    /** Flg for aggregating each module report in multi-module environment. */
+    @Parameter
+    protected String overallCoveragePath = null;
+
     @Parameter
     protected List<ReportFormat> reportFormats = Collections.emptyList();
 
@@ -110,9 +114,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
         if (!"pom".equals(project.getPackaging()) && !skipModule && !reportFormats.contains(html)) {
             try {
                 executeReport(Locale.getDefault(), false);
-            } catch (final IOException e) {
-                throw new IllegalStateException(e);
-            } catch (final MavenReportException e) {
+            } catch (final IOException | MavenReportException e) {
                 throw new IllegalStateException(e);
             }
         }
@@ -170,7 +172,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
                 loader.getExecutionDataStore().getContents());
 
 
-        final List<Pattern> patterns = new ArrayList<Pattern>();
+        final List<Pattern> patterns = new ArrayList<>();
         for (final String excludeModule : excludeModules) {
             patterns.add(Pattern.compile(excludeModule));
         }
@@ -206,7 +208,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
 
     private IReportVisitor createVisitor(final Locale locale, final File outputDirectory)
             throws IOException {
-        final List<IReportVisitor> visitors = new ArrayList<IReportVisitor>();
+        final List<IReportVisitor> visitors = new ArrayList<>();
 
         if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
             throw new IOException("Unable to create " + outputDirectory);
@@ -267,7 +269,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     }
 
     private List<File> getCompileSourceRoots(final MavenProject project) {
-        final Set<File> result = new HashSet<File>();
+        final Set<File> result = new HashSet<>();
         for (final String path : project.getCompileSourceRoots()) {
             result.add(resolvePath(project, path));
         }
@@ -275,7 +277,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
         for (final String path : sources) {
             result.add(resolvePath(project, path));
         }
-        return new ArrayList<File>(result);
+        return new ArrayList<>(result);
     }
 
     private void checkForMissingDebugInformation(final ICoverageNode node) {
@@ -337,7 +339,7 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
     protected abstract File getOutputDirectory(final MavenProject project);
 
     protected static File join(final File file, final String... parts) {
-        final List<String> elements = new ArrayList<String>(Arrays.asList(parts));
+        final List<String> elements = new ArrayList<>(Arrays.asList(parts));
         File result = file;
         if (file == null && parts.length > 0) {
             result = new File(elements.remove(0));
