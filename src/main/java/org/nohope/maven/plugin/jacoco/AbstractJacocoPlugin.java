@@ -203,6 +203,17 @@ public abstract class AbstractJacocoPlugin extends AbstractMojo {
 
         if (visited) {
             mainVisitor.visitEnd();
+            if (root && overallCoveragePath != null) {
+                for (final MavenProject child : reactorProjects) {
+                    final File file = resolvePath(child, overallCoveragePath);
+                    final File parentFile = file.getParentFile();
+                    if (!parentFile.exists() && !parentFile.mkdirs()) {
+                        throw new MavenReportException("Unable to create dir " + parentFile);
+                    }
+
+                    loader.save(file, false);
+                }
+            }
         }
     }
 
